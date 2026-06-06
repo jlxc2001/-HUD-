@@ -88,6 +88,7 @@ public class MainActivity extends Activity {
     private boolean mirrorMode = false;
     private boolean speedEnabled = false;
     private boolean timeEnabled = false;
+    private boolean stoppedBySender = false;
     private boolean overlayVisible = true;
     private long lastTapTime = 0L;
 
@@ -594,9 +595,11 @@ public class MainActivity extends Activity {
                     frameCount, ageText, lastBytes / 1024f, lastSource));
         }
 
-        if (frameCount == 0 && centerText != null) {
+        if (frameCount == 0 && centerText != null && !stoppedBySender) {
             centerText.setVisibility(View.VISIBLE);
             centerText.setText(makeWaitingText());
+        } else if (centerText != null && stoppedBySender) {
+            centerText.setVisibility(View.GONE);
         }
     }
 
@@ -670,7 +673,20 @@ public class MainActivity extends Activity {
             OutputStream out = socket.getOutputStream();
 
             String headers = readHeaders(in);
+            boolean isControl = headers.startsWith("POST /control") || headers.startsWith("POST /stop");
             int contentLength = parseContentLength(headers);
+
+            if (isControl) {
+                byte[] body = contentLength > 0 ? readExact(in, Math.min(contentLength, 4096)) : new byte[0];
+                String command = new String(body, "UTF-8").trim();
+                writeResponse(out, 200, "ok");
+                socket.close();
+                if ("STOP".equalsIgnoreCase(command) || command.length() == 0) {
+                    runOnUiThread(() -> handleStopCommand(source));
+                }
+                return;
+            }
+
             if (contentLength <= 0 || contentLength > 3_500_000) {
                 writeResponse(out, 400, "bad content length");
                 socket.close();
@@ -686,6 +702,25 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
             try { socket.close(); } catch (Exception ignored2) {}
         }
+    }
+
+    private void handleStopCommand(String source) {
+        Bitmap old = null;
+        if (imageView.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
+            old = ((android.graphics.drawable.BitmapDrawable) imageView.getDrawable()).getBitmap();
+        }
+        imageView.setImageDrawable(null);
+        if (old != null && !old.isRecycled()) old.recycle();
+
+        stoppedBySender = true;
+        lastFrameTime = 0L;
+        lastBytes = 0;
+        lastSource = TextUtils.isEmpty(source) ? "STOP" : source + " STOP";
+        if (centerText != null) centerText.setVisibility(View.GONE);
+        refreshStatusText();
+        refreshProjectionWidgets();
+        setOverlayVisible(false);
+        hideSystemUi();
     }
 
     private String readHeaders(InputStream in) throws Exception {
@@ -741,6 +776,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateFrame(Bitmap bitmap, int bytes, String source) {
+        stoppedBySender = false;
         Bitmap old = null;
         if (imageView.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
             old = ((android.graphics.drawable.BitmapDrawable) imageView.getDrawable()).getBitmap();
