@@ -1,0 +1,13 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.jlxc.carhudreceiver'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.jlxc.carhudreceiver'
+        minSdk 23
+        targetSdk 33
+        versionCode 2
+        versionName '1.1'
+    }
+}
