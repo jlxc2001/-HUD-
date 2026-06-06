@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
     private static final int REQ_LOCATION = 2001;
     private static final long OVERLAY_HIDE_DELAY_MS = 3000L;
     private static final long WAITING_OVERLAY_HIDE_DELAY_MS = 6000L;
+    // 长时间没有收到新导航画面时，自动清空最后一帧，回到纯黑 HUD 状态。
+    private static final long FRAME_TIMEOUT_CLEAR_MS = 6000L;
     private static final long DOUBLE_TAP_MS = 320L;
 
     private FrameLayout root;
@@ -105,6 +107,7 @@ public class MainActivity extends Activity {
     private final Runnable tickRunnable = new Runnable() {
         @Override
         public void run() {
+            checkFrameTimeout();
             refreshStatusText();
             refreshProjectionWidgets();
             uiHandler.postDelayed(this, 1000L);
@@ -702,6 +705,37 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
             try { socket.close(); } catch (Exception ignored2) {}
         }
+    }
+
+
+    private void checkFrameTimeout() {
+        if (frameCount <= 0) return;
+        if (stoppedBySender) return;
+        if (lastFrameTime <= 0L) return;
+
+        long ageMs = System.currentTimeMillis() - lastFrameTime;
+        if (ageMs >= FRAME_TIMEOUT_CLEAR_MS) {
+            handleFrameTimeout();
+        }
+    }
+
+    private void handleFrameTimeout() {
+        Bitmap old = null;
+        if (imageView.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
+            old = ((android.graphics.drawable.BitmapDrawable) imageView.getDrawable()).getBitmap();
+        }
+        imageView.setImageDrawable(null);
+        if (old != null && !old.isRecycled()) old.recycle();
+
+        stoppedBySender = true;
+        lastFrameTime = 0L;
+        lastBytes = 0;
+        lastSource = "TIMEOUT";
+        if (centerText != null) centerText.setVisibility(View.GONE);
+        refreshStatusText();
+        refreshProjectionWidgets();
+        setOverlayVisible(false);
+        hideSystemUi();
     }
 
     private void handleStopCommand(String source) {
