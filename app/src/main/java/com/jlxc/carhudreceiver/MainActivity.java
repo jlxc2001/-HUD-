@@ -113,6 +113,12 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             if (settingsOverlay != null && settingsOverlay.getVisibility() == View.VISIBLE) return;
+            // 未接收到第一帧之前，等待说明、IP、端口和设置按钮必须一直显示，
+            // 方便用户填写发送端地址。只有收到导航画面后，才启用 3 秒自动隐藏。
+            if (frameCount == 0) {
+                setOverlayVisible(true);
+                return;
+            }
             setOverlayVisible(false);
         }
     };
@@ -512,6 +518,12 @@ public class MainActivity extends Activity {
 
     private void resetOverlayAutoHideTimer() {
         uiHandler.removeCallbacks(hideOverlayRunnable);
+        // 未收到画面时不要自动隐藏任何提示文字或设置按钮；
+        // 收到第一帧之后，再按 3 秒无触摸自动隐藏。
+        if (frameCount == 0) {
+            setOverlayVisible(true);
+            return;
+        }
         uiHandler.postDelayed(hideOverlayRunnable, OVERLAY_HIDE_DELAY_MS);
     }
 
@@ -741,12 +753,19 @@ public class MainActivity extends Activity {
         }
         imageView.setImageBitmap(bitmap);
         if (old != null && old != bitmap && !old.isRecycled()) old.recycle();
+
+        boolean firstFrame = frameCount == 0;
         frameCount++;
         lastFrameTime = System.currentTimeMillis();
         lastBytes = bytes;
         lastSource = TextUtils.isEmpty(source) ? "--" : source;
         centerText.setVisibility(View.GONE);
         refreshStatusText();
+
+        // 第一帧到达后，才正式进入 HUD 显示状态，并启动 3 秒无触摸自动隐藏。
+        if (firstFrame) {
+            showOverlayTemporary();
+        }
         hideSystemUi();
     }
 
