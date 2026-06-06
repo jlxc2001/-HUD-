@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private static final int PORT = 45678;
     private static final int REQ_LOCATION = 2001;
     private static final long OVERLAY_HIDE_DELAY_MS = 3000L;
+    private static final long WAITING_OVERLAY_HIDE_DELAY_MS = 6000L;
     private static final long DOUBLE_TAP_MS = 320L;
 
     private FrameLayout root;
@@ -113,12 +114,8 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             if (settingsOverlay != null && settingsOverlay.getVisibility() == View.VISIBLE) return;
-            // 未接收到第一帧之前，等待说明、IP、端口和设置按钮必须一直显示，
-            // 方便用户填写发送端地址。只有收到导航画面后，才启用 3 秒自动隐藏。
-            if (frameCount == 0) {
-                setOverlayVisible(true);
-                return;
-            }
+                // 未接收到第一帧之前，等待说明、IP、端口和设置按钮显示 6 秒后自动隐藏；
+            // 收到导航画面后，改为 3 秒无触摸自动隐藏。
             setOverlayVisible(false);
         }
     };
@@ -347,7 +344,7 @@ public class MainActivity extends Activity {
         TextView title = makeSettingsTitle("HUD接收端 设置");
         card.addView(title);
 
-        TextView subtitle = makeSettingsHint("接收发送端传来的导航卡片图像，并在接收端屏幕上以 HUD 方式显示。单击屏幕会显示状态栏，3 秒无触摸后自动隐藏。");
+        TextView subtitle = makeSettingsHint("接收发送端传来的导航卡片图像，并在接收端屏幕上以 HUD 方式显示。未接收到画面前，提示信息会在 6 秒无触摸后隐藏；接收到画面后，状态栏会在 3 秒无触摸后隐藏。");
         card.addView(subtitle);
 
         Switch mirrorSwitch = makeSwitch("HUD反射倒像模式", "用于没有系统级镜像的设备。开启后，投影画面、GPS车速和时间会左右镜像，经过挡风玻璃反射后变正。", mirrorMode);
@@ -518,13 +515,10 @@ public class MainActivity extends Activity {
 
     private void resetOverlayAutoHideTimer() {
         uiHandler.removeCallbacks(hideOverlayRunnable);
-        // 未收到画面时不要自动隐藏任何提示文字或设置按钮；
-        // 收到第一帧之后，再按 3 秒无触摸自动隐藏。
-        if (frameCount == 0) {
-            setOverlayVisible(true);
-            return;
-        }
-        uiHandler.postDelayed(hideOverlayRunnable, OVERLAY_HIDE_DELAY_MS);
+        // 未收到画面前：显示 6 秒，留给用户记录 IP 和端口；
+        // 收到第一帧后：显示 3 秒，然后进入纯 HUD 状态。
+        long delay = frameCount == 0 ? WAITING_OVERLAY_HIDE_DELAY_MS : OVERLAY_HIDE_DELAY_MS;
+        uiHandler.postDelayed(hideOverlayRunnable, delay);
     }
 
     private void setOverlayVisible(boolean visible) {
